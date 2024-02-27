@@ -1,0 +1,265 @@
+---
+title: "BUS5DWR Assignment 2"
+output: html_notebook
+---
+
+Q 1.1::
+```{r}
+library(dplyr)
+library(tidyverse)
+
+# loading datasets
+show <- read.csv("show.csv")
+MaturityType <- read.csv("MaturityType.csv")
+
+#Renaming columns to remove space
+colname <- names(show)
+colname
+names(show) <- str_replace_all(colname, "\\.", "")
+colname
+
+# Checking datatypes and changing data type of Date column
+str(show)
+show$DateAdded <- as.Date(show$DateAdded,"%d/%m/%y")
+
+# Showing a summary of each dataframe
+summary(show)
+summary(MaturityType)
+```
+Q 1.2::
+```{r}
+# Checking if there are any duplicate rows
+carry_duplicate_data <- any(duplicated(show))
+carry_duplicate_data
+
+# Checking which rows are duplicate
+duplicate_row <- which(duplicated(show))
+duplicate_row
+
+# Showing duplicate data
+duplicate_show <- subset(show, duplicated(show))
+duplicate_show
+
+# Removing duplicates
+show <- unique(show)
+show
+
+# Modifying ImdbScore column
+show$ImdbScore <- as.numeric(gsub("/10", "", show$ImdbScore))
+str(show)
+```
+Q 1.3::
+```{r}
+# chosen production country = South Korea, chosen year = 2020
+
+# Joining two dataframes
+show_maturity <- full_join(show, MaturityType, c("Rating" = "Maturity.Type"))
+
+# Displaying TV Shows for mature audience
+matureAudience <- filter(show_maturity, ProductionCountry=="South Korea", ReleaseDate == 2020, Rating == "TV-MA", ContentType == "TV Show",  )
+matureAudience
+```
+
+Q 1.4::
+```{r}
+# Displaying titles with "teen" and "high school"
+teenhighschool <- show %>%
+  filter(str_detect(show$Description, "teen", negate = FALSE), str_detect(show$Description, "high school", negate = FALSE)) %>%
+  select(Title, ReleaseDate, ImdbScore) %>%
+  arrange(ReleaseDate, desc(ImdbScore)) %>%
+  head(5)
+teenhighschool
+```
+Q 1.5::
+```{r}
+# Displaying TV Shows for general audience
+generalAudience <- show_maturity %>% 
+  filter(Rating == "TV-G", ContentType == "TV Show") %>%
+  group_by(ProductionCountry) %>%
+  summarise(NumberOfTVShows = n(), AvegareScore = mean(ImdbScore, na.rm = TRUE)) %>%
+  arrange(desc(NumberOfTVShows)) %>%
+  head(3)
+generalAudience
+```
+
+Q 1.6::
+```{r}
+library(ggplot2)
+
+# Drawing a boxplot
+show %>%
+  filter(ProductionCountry %in% c('United States', 'Canada'), ReleaseDate > 2010) %>%
+  ggplot() +
+  aes(x = ProductionCountry, y = ImdbScore) +
+  geom_boxplot() +
+  xlab('Production Country') + ylab('Imdb Score') +
+  ggtitle('Imdb Score Distribution In United States and Canada')
+
+# five values of United States
+library(stats)
+
+fiveValues_us<- (boxplot.stats(show[show$ProductionCountry == 'United States',]$ImdbScore))
+fiveValues_us
+
+#five values of Canada
+fiveValues_canada<- (boxplot.stats(show[show$ProductionCountry == 'Canada',]$ImdbScore))
+fiveValues_canada
+```
+Insights: From the five values of United States's boxplot, it is visible that the minimum Imdb score is 3.7, the first quartile (Q1) is 5.9 which mean 25% data falls below 5.9, median is 6.7, the third quartile (Q3) is 7.4 which means 75% data falls below 7.4, and the maximum Imdb score is 9.4. 
+From the five values of Canada's boxplot, it is visible that the minimum Imdb score is 3.50, the first quartile (Q1) is 5.45 which mean 25% data falls below 5.45, median is 6.50, the third quartile (Q3) is 7.35 which means 75% data falls below 7.35, and the maximum Imdb score is 8.70.
+In conclusion, there are only slight differences between the score distributions of the two countries and United States has comparatively higher scores than Canada.
+
+Q 1.7a::
+A mother can choose a good movie for her children by seeing the ratings of the movies. For a child who is less than 7 years old TV-Y and G rated movies would be most suitable.
+
+Q 1.7b::
+```{r}
+# Displaying top 5 movies
+movies_for_children_under_7 <- show_maturity %>%
+  filter(ContentType == 'Movie', Rating == 'G' | Rating == 'TV-Y') %>%
+  arrange(desc(ImdbScore)) %>%
+  head(5)
+movies_for_children_under_7
+```
+Q 1.7c::
+Insights and recommendations: In movies_for_children_under_7 top 5 movies are ranked based on their Imdb score. All the movies are rated TV-Y, TV show designed to be appropriate for all children, and G, Suitable for general audience. Mothers can choose these movies for their children who are below 7 years old.
+
+
+Q 2.1::
+```{r}
+install.packages("readxl")
+library(readxl)
+
+# loading dataset production
+production <- read_excel("Production.xlsx", skip = 2, col_names = FALSE, range = "A3:F204")
+colnames(production) <- as.character(unlist(production[1,]))
+production <- production[-1,]
+
+View(production)
+
+# Renaming columns to remove 'Year'
+production <- production %>%
+  rename("2017" = "Year 2017", "2018" = "Year 2018", "2019" = "Year 2019", "2020" = "Year 2020", "2021" = "Year 2021")
+
+glimpse(production)
+```
+
+Q 2.2a::
+```{r}
+# Transforming dataframe into three columns
+production <- production %>%
+  pivot_longer(c(2:6), names_to = "Year", values_to = "Average Rating", values_drop_na = TRUE)
+```
+Q 2.2b::
+```{r}
+# Spliting the first column
+production <- production %>%
+  separate(`Production Country / Maturity Type`, c("ProductionCountry", "MaturityType"), sep = "/")
+
+```
+Q 2.2c::
+```{r}
+# Spliting column 'Average Rating'
+production <- production %>%
+  separate(`Average Rating`, c("NumProducts", "Score"), sep = "-")
+
+# Checking data types
+str(production)
+
+# Changing data types
+production$NumProducts <- as.numeric(production$NumProducts)
+production$Score <- as.numeric(gsub("/10", "", production$Score))
+```
+Q 2.2d::
+```{r}
+# Displaying the number of columns and rows
+dim(production)
+```
+Q 2.2e::
+```{r}
+# Number of distinct countries
+distinct_countries <- production %>%
+  distinct(ProductionCountry) %>% n_distinct()
+cat("Number of distinct countries:", distinct_countries, "\n")
+
+# Number of distinct years
+distinct_years <- production %>%
+  distinct(Year) %>% n_distinct()
+cat("Number of distinct years:", distinct_years, "\n")
+```
+Q 2.3::
+```{r}
+# Displaying countries with average score between 6.8 to 7.0
+score_between_6.8to7 <- production %>%
+  filter(Year == 2021 & between(Score, 6.8, 7.0))
+score_between_6.8to7
+country_list <- unique(score_between_6.8to7$ProductionCountry)
+cat("Countries that have an average score from 6.8 to 7.0 in 2021:", country_list, "/n" )
+```
+Q 2.4::
+```{r}
+# Loading dataset
+continent <- read_excel("Production.xlsx", sheet = "Continent", skip = 2, col_names = FALSE, range = "A3:B252")
+colnames(continent) <- as.character(unlist(continent[1,]))
+continent <- continent[-1,]
+
+View(continent)
+
+# Renaming columns
+continent <- continent %>%
+  rename("Country" = `Country or Area`, "Continent" = `Continent Name`)
+
+# Calculating number of countries
+num_of_countries <- continent %>%
+  distinct(Country) %>% n_distinct()
+cat("Number of total countries:", num_of_countries, "\n")
+
+# Trimming space after country name in Production dataset
+production$ProductionCountry <- trimws(production$ProductionCountry, "right")
+
+# Cleaning continent dataset
+continent <- continent %>%
+  mutate(Country = case_when(
+    Country == "China, Hong Kong Special Administrative Region" ~ "Hong Kong",
+    Country == "Russian Federation" ~ "Russia",
+    Country == "United Kingdom of Great Britain and Northern Ireland" ~ "United Kingdom",
+    Country == "United States of America" ~ "United States",
+    Country == "Viet Nam" ~ "Vietnam",
+    TRUE ~ as.character(Country)
+  ))
+
+# Countries that do not appear in the data worksheet
+countriesNotInDataSheet <- anti_join(continent, production, c("Country" = "ProductionCountry"))
+cat("Number of countries that do not appear in the data worksheet:", nrow(countriesNotInDataSheet), "\n")
+```
+
+Q 2.5a::
+Proposed criteria: The most effective way to identify Asian countries which Netflix should target to further grow their market is to analyse the countries based on their score. If we look at scores of only one year that will not give a overall scenario. So, we need to calculate their average score over 5 years and rank countries based on that. Through this we can identify countries that have a growing market.
+
+Q 2.5b::
+```{r}
+# Joining datasets
+production_continent <- left_join(production, continent, c("ProductionCountry" = "Country"))
+View(production_continent)
+
+# Displaying top 5 countries based on proposed ranking
+top5AsianCountries <- production_continent %>%
+  filter(Continent == "Asia") %>%
+  group_by(ProductionCountry) %>%
+  summarise(Average_Score = mean(Score)) %>%
+  arrange(desc(Average_Score)) %>%
+  head(5)
+top5AsianCountries
+```
+Q 2.5c::
+```{r}
+# Drawing a bar chart
+ggplot(top5AsianCountries, aes(x = ProductionCountry, y = Average_Score)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  ggtitle("Top 5 Asian Countries by Score ") +
+  xlab("Country") +
+  ylab("Average Score") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+Q 2.5d::
+Insights: In top5AsianCountries it is visible that the top 5 countries with the highest average score are Israel, Lebanon, Japan, Bangladesh, and China. Israel has the highest average score of 7.54, Lebanon has 7.13, Japan and Bangladesh have scores of 6.9 and China's score is 6.8. These scores are depicting a growing market in these regions. So, to expand it's market Netflix should develop strategies on enhancing customer base in these countries.
