@@ -1,0 +1,221 @@
+---
+title: "British Airways"
+output: html_notebook
+---
+```{r}
+# loading related packages
+library(moments)
+library(Amelia)
+library(dplyr)
+library(psych)
+library(purrr)
+library(tidyr)
+library(ggplot2)
+library(caret)
+library(GGally)
+library(corrplot)
+library(plotly)
+library(rpart)
+library(rpart.plot)
+```
+
+```{r}
+data <- read.csv("customer_booking.csv")
+```
+
+```{r}
+View(data)
+```
+
+```{r}
+summary(data)
+```
+
+Studying the dataset
+```{r}
+# checking variable type
+table(data$flight_day)
+table(data$trip_type)
+table(data$sales_channel)
+table(data$route)
+table(data$booking_origin)
+```
+
+The data types looks good as per the summary statistics.
+The data includes 7 days of a week.
+Customers use 2 channels: Internet, Mobile.
+There are 3 types of trips: Circle trip, one way, and round trip.
+
+```{r}
+# understanding data distribution
+hist(data$num_passengers, col="blue")
+hist(data$purchase_lead, col="blue")
+hist(data$length_of_stay, col="blue")
+hist(data$flight_hour, col="blue")
+hist(data$flight_duration, col="blue")
+```
+
+num_passengers, purchase_lead, and length_of_stay are skewed to the right.
+flight_hour is normally distributed
+flight_duration is skewed to the left
+
+```{r}
+table(data$wants_extra_baggage)
+table(data$wants_preferred_seat)
+table(data$wants_in_flight_meals)
+table(data$booking_complete)
+```
+
+```{r}
+#checking for missing values
+missmap(data, col= c("blue", "grey"), y.at=1, y.labels = '', legend = TRUE)
+```
+It is visible that the dataset doesn't have missing values. We would have to handle the missing values before creating a predictive model.
+
+```{r}
+# transforming skewed data
+# num_passengers
+trans_num_passengers <- log(data$num_passengers)
+par(mfrow=c(1,2))
+hist(data$num_passengers, c="blue", main = "Original")
+hist(trans_num_passengers, c= "blue", main = "Transformed")
+
+```
+
+```{r}
+# purchase_lead
+trans_purchase_lead <- log(data$purchase_lead)
+par(mfrow=c(1,2))
+hist(data$purchase_lead, c="blue", main = "Original")
+hist(trans_purchase_lead, c= "blue", main = "Transformed")
+
+```
+
+```{r}
+# length_of_stay
+trans_length_of_stay <- log(data$length_of_stay)
+par(mfrow=c(1,2))
+hist(data$length_of_stay, c="blue", main = "Original")
+hist(trans_length_of_stay, c= "blue", main = "Transformed")
+
+```
+
+To transform the left skewed variable flight_duration, I will use square root transformation.
+
+```{r}
+trans_flight_duration <- sqrt(data$flight_duration)
+par(mfrow=c(1,2))
+hist(data$flight_duration, c="blue", main = "Original")
+hist(trans_flight_duration, c= "blue", main = "Transformed")
+```
+
+Now, I need to change data types of 'character' variables into 'numerical' variables. Because, predictive models require all variables to be numeric.
+variables need to be changed: sales_channel, trip_type, flight_day, route, booking_origin.
+
+```{r}
+data$sales_channel <- factor(data$sales_channel, levels = c('Internet', 'Mobile'))
+data$sales_channel <- as.numeric(data$sales_channel)
+class(data$sales_channel)
+```
+
+```{r}
+# trip_type
+data$trip_type <- factor(data$trip_type, levels = c('CircleTrip', 'OneWay', 'RoundTrip'))
+data$trip_type <- as.numeric(data$trip_type)
+class(data$trip_type)
+```
+
+```{r}
+# flight_day
+data$flight_day <- factor(data$flight_day, 
+                          levels = c('Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu'),
+                          labels = c(1,2,3,4,5,6,7))
+
+data$flight_day <- as.numeric(data$flight_day)
+class(data$flight_day)
+```
+I will use label-encoding to transform 'route'
+
+```{r}
+data$route <- as.numeric(factor(data$route))
+data$booking_origin <- as.numeric(factor(data$booking_origin))
+```
+
+
+```{r}
+class(data$route)
+class(data$booking_origin)
+```
+I will check if we got any missing value in the transformation process.
+```{r}
+missmap(data, col = c("blue", "grey"), y.at = 1, y.labels = '', legend = TRUE)
+```
+
+There's none. So, the dataset is ready for creating predictive model.
+I will check correlation between the variables.
+
+```{r}
+ggcorr(data, label = TRUE)
+```
+None of the variables have very high positive or negative correlation. Their correlation range between 0 to 0.3 which is quite low.
+
+I will build a linear model.
+
+```{r}
+sample_size <- floor(2/3 * nrow(data))
+set.seed(3)
+data <- data[sample(nrow(data)), ]
+data.train <- data[1:sample_size, ]
+data.test <- data[(sample_size+1) : nrow(data), ]
+
+formula = booking_complete~.
+```
+
+```{r}
+linearmodel <- lm(formula = formula, data = data)
+summary(linearmodel)$coefficients
+```
+
+```{r}
+as.formula(
+  paste0("y ~ ", round(coefficients(linearmodel)[1], 2), "+",
+         paste(sprintf("%.2f * .%s", coefficients(linearmodel)[-1],
+                       names(coefficients(linearmodel)[-1])),
+               collapse = "+")
+         )
+)
+```
+From the formula it can be interpreted that num_passengers, purchase_lead, length_of_stay, flight_hour, flight_day, route, booking_origin do not have any influence on predicting the target variable booking_completion.
+A change is trip_type, wants_extra_baggage, wants_preferred_seat, and wants_ins_flight_meal can increase the target variable.
+On the other hand, a change in sales_channel and flight_duration can decrease the target variable.
+
+The values are quite low. It is difficult to make a decision based on this model.
+So, I am going to use another model to assess the dataset.
+
+```{r}
+library(randomForest)
+```
+
+```{r}
+data$booking_complete <- as.factor(data$booking_complete)
+
+x <- data[, -which(names(data) == "booking_complete")]
+y <- data$booking_complete
+
+rf_model <- randomForest(x, y)
+
+importance <- rf_model$importance
+
+print(importance)
+```
+The result indicates that purchase_lead, flight_hour, route, length_of_stay, flight_day are the most important predictors for determining booking_complete, as these variables have high MeanDecreaseGini values.
+It also suggests that variables related to booking lead time and booking origin are more important than other factors.
+This model is giving a better idea of customer behavior pattern and can be used for decision making.
+It is important to choose the right model for a particular dataset, sicne this can highly impact decision making process.
+
+creating visualisation
+
+```{r}
+varImpPlot(rf_model, main = "Variable Importance Plot")
+```
+
